@@ -10,6 +10,7 @@ router = APIRouter()
 
 @router.post("/signup", response_model=UserResponse)
 async def create_user(user: UserCreate):
+    print(user)
     # Insert user into the database
     user_dict = user.dict()
     user_dict['password'] = get_password_hash(user_dict['password'])  # Ensure password is hashed
