@@ -23,8 +23,8 @@ async def create_user(user: UserCreate):
     created_user = await db["users"].find_one({"_id": created_user.inserted_id})
     
     # Map _id to user_id and ensure all required fields are present
-    return UserResponse(
-       status_code=201,
-       message="User created successfully",
+    return UserResponse({
+       "status_code":201,
+       "message":"User created successfully",}
     
     )
