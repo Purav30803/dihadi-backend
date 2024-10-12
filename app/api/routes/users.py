@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from app.schemas.user import UserCreate, UserResponse
 from app.models.user import User
 from app.db.mongodb import db
+from fastapi.responses import JSONResponse
 import bcrypt
 from app.core.security import get_password_hash
 from bson import ObjectId
@@ -23,7 +24,7 @@ async def create_user(user: UserCreate):
     created_user = await db["users"].find_one({"_id": created_user.inserted_id})
     
     # Map _id to user_id and ensure all required fields are present
-    return UserResponse({
+    return JSONResponse({
        "status_code":201,
        "message":"User created successfully",}
     
