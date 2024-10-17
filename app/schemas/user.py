@@ -15,7 +15,7 @@ class UserCreate(BaseModel):
     location: Optional[str] = None
 
 class UserResponse(BaseModel):
-    user_id: str
+    # user_id: str
     name: str
     email: str
     phone: str

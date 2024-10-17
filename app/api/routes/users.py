@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from app.schemas.user import UserCreate, UserResponse, UserLogin
 from app.models.user import User
 from app.db.mongodb import db
@@ -7,6 +7,7 @@ import bcrypt
 from app.core.security import get_password_hash, verify_password
 import jwt
 from app.core.config import SECRET_KEY, ALGORITHM
+from fastapi.security import OAuth2PasswordBearer
 
 router = APIRouter()
 
@@ -66,3 +67,19 @@ async def login_user(user:UserLogin):
         "message":"Login Successful",
         "token":token,
     })
+    
+# get user token from header and find user
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+@router.get("/me", response_model=UserResponse)
+async def get_user(token: str = Depends(oauth2_scheme)):
+    print(token)
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # print(payload)
+        user = await db["users"].find_one({"email": payload['email']})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        return user
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=403, detail="Invalid Token")
