@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.schemas.user import UserCreate, UserResponse, UserLogin
+from app.schemas.user import UserCreate, UserResponse, UserLogin, UserDocumentResponse
 from app.models.user import User
 from app.db.mongodb import db
 from fastapi.responses import JSONResponse
@@ -8,6 +8,9 @@ from app.core.security import get_password_hash, verify_password
 import jwt
 from app.core.config import SECRET_KEY, ALGORITHM
 from fastapi.security import OAuth2PasswordBearer
+import base64
+import io
+from PIL import Image
 
 router = APIRouter()
 
@@ -81,5 +84,28 @@ async def get_user(token: str = Depends(oauth2_scheme)):
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         return user
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=403, detail="Invalid Token")
+
+
+@router.get("/me/document",response_model=UserDocumentResponse)
+async def get_user_document(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user = await db["users"].find_one({"email": payload['email']})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        id_proof = user.get('id_proof')
+        # convert base64 to image
+    
+        # convert base64 to image
+      
+        
+        
+        
+        return JSONResponse({
+            "status_code":200,
+            "id_proof":id_proof,
+        })
     except jwt.PyJWTError:
         raise HTTPException(status_code=403, detail="Invalid Token")

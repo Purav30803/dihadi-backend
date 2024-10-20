@@ -34,3 +34,6 @@ class UserResponse(BaseModel):
 class UserLogin(BaseModel):
     email: str
     password: str
+
+class UserDocumentResponse(BaseModel):
+    id_proof: str
