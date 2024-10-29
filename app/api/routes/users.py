@@ -1,18 +1,50 @@
 from fastapi import APIRouter, HTTPException, Depends
 from app.schemas.user import UserCreate, UserResponse, UserLogin, UserDocumentResponse
-from app.models.user import User
 from app.db.mongodb import db
 from fastapi.responses import JSONResponse
-import bcrypt
+import os
+import random
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from app.core.security import get_password_hash, verify_password
 import jwt
 from app.core.config import SECRET_KEY, ALGORITHM
 from fastapi.security import OAuth2PasswordBearer
-import base64
-import io
-from PIL import Image
+from dotenv import load_dotenv
 
 router = APIRouter()
+load_dotenv()
+
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
+USER_EMAIL = os.getenv("USER_EMAIL")
+USER_PASSWORD = os.getenv("USER_PASSWORD")
+
+def send_otp(email):
+    
+    otp = random.randint(100000, 999999)
+    subject = "Your OTP Code"
+    body = f"Your OTP code is {otp}"
+
+    msg = MIMEMultipart()
+    msg["From"] = USER_EMAIL
+    msg["To"] = email
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain"))
+
+    try:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(USER_EMAIL, USER_PASSWORD)
+            server.sendmail(USER_EMAIL, email, msg.as_string())
+        
+        return otp  # Return the OTP for further processing if needed
+    except smtplib.SMTPException as e:
+        print(f"Failed to send email: {e}")
+        return None
+
+
 
 @router.post("/signup", response_model=UserResponse)
 async def create_user(user: UserCreate):
@@ -36,12 +68,37 @@ async def create_user(user: UserCreate):
     if not created_user.inserted_id:
         raise HTTPException(status_code=500, detail="Failed to create user")
     
+    # create OTP and send to user
+    else:
+        otp =  send_otp(user_email)    
+    #    save otp in users collection
+        await db["users"].update_one({"email": user_email}, {"$set": {"otp": otp}})
+       
+        
     
     return JSONResponse({
        "status_code":201,
        "message":"User created successfully",}
     
     )
+
+
+@router.post("/verify")
+async def verify_user(email:str, otp:int):
+    user = await db["users"].find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    else:
+        #drop otp from users collection
+        if user['otp'] != otp:
+            raise HTTPException(status_code=400, detail="Invalid OTP")
+        else:
+            await db["users"].update_one({"email": email}, {"$unset": {"otp": ""}})
+            return JSONResponse({
+            "status_code":200,
+            "message":"User verified successfully",
+            })
+         
 
 # Login
 @router.post("/login")
