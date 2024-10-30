@@ -83,7 +83,7 @@ async def create_user(user: UserCreate):
     )
 
 
-@router.post("/verify")
+@router.get("/verify")
 async def verify_user(email:str, otp:int):
     user = await db["users"].find_one({"email": email})
     if not user:
@@ -108,6 +108,12 @@ async def login_user(user:UserLogin):
     user_password = user_dict['password']
     print(user_email)
     print(user_password)
+    otp_exists = await db["users"].find_one({"email": user_email, "otp": {"$exists": True}})
+    if otp_exists:
+        return JSONResponse({
+            "status_code":400,
+            "message":"User not verified",
+        })
     user_exists = await db["users"].find_one({"email": user_email})
     
     
