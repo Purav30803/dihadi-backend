@@ -9,7 +9,7 @@ class JobPostBase(BaseModel):
     shift_end: datetime
     salary: float
     location: str
-    skills_required: List[str]
+    skills_required: str
     status: str  # active, completed, cancelled
 
 class JobPostCreate(JobPostBase):
