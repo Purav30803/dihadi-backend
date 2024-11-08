@@ -5,9 +5,9 @@ from typing import List
 class JobPostBase(BaseModel):
     job_title: str
     job_description: str
-    shift_start: datetime
-    shift_end: datetime
-    salary: float
+    shift_start: str
+    shift_end: str
+    salary: str
     location: str
     skills_required: str
     status: str  # active, completed, cancelled
