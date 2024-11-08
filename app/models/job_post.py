@@ -10,5 +10,5 @@ class JobPost(BaseModel):
     shift_end: str
     salary: float
     location: str
-    skills_required: List[str]
+    skills_required: str
     status: str  # e.g., 'active', 'completed', 'cancelled'

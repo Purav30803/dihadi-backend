@@ -132,6 +132,7 @@ async def login_user(user:UserLogin):
         "status_code":200,
         "message":"Login Successful",
         "token":token,
+        
     })
     
 # get user token from header and find user

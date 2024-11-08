@@ -1,50 +1,48 @@
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel
 from typing import Optional
+from bson import ObjectId
+from app.db.mongodb import db
+from fastapi.security import OAuth2PasswordBearer
 
-from app.core.config import settings
-from app.core.security import verify_password
-from app.models.user import User
-from app.db.mongodb import AsyncIOMotorClient
+# TokenData for validation
+class TokenData(BaseModel):
+    email: Optional[str] = None
+
+# Update User to expect a `user_id` field
+class User(BaseModel):
+    user_id: str
+    email: str
+    name: Optional[str] = None
+    location: Optional[str] = None
+    # Add other fields as required
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-    
-class TokenData(BaseModel):
-    username: str
-
-async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncIOMotorClient = Depends(get_database)) -> User:
+# Modified get_current_user
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
+    print("token: ", token)
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
+
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
+        payload = jwt.decode(token, "dihadi", algorithms=["HS256"])
+        email: str = payload.get("email")
+        if email is None:
             raise credentials_exception
-        token_data = TokenData(username=username)
+        token_data = TokenData(email=email)
     except JWTError:
         raise credentials_exception
-    
-    user = await db.users.find_one({"username": token_data.username})
+
+    user = await db.users.find_one({"email": token_data.email})
     if user is None:
         raise credentials_exception
+
+    # Ensure ObjectId `_id` is mapped to `user_id` as a string
+    user["user_id"] = str(user.pop("_id", None))
     
     return User(**user)
-
-# how to use the get_current_user function
-# from fastapi import FastAPI, Depends
-
-# app = FastAPI()
-
-# @app.get("/users/me")
-# async def read_users_me(current_user: User = Depends(get_current_user)):
-#     return current_user
