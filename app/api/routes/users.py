@@ -126,8 +126,11 @@ async def login_user(user:UserLogin):
     if not correctPassword:
         raise HTTPException(status_code=400, detail="Invalid Password")
     
+    user_id = user_exists['_id']
+    user_id = str(user_id)
+    
     # create a token
-    token = jwt.encode({"email": user_email}, SECRET_KEY, algorithm=ALGORITHM)
+    token = jwt.encode({"email": user_email,"id":user_id}, SECRET_KEY, algorithm=ALGORITHM)
     return JSONResponse({
         "status_code":200,
         "message":"Login Successful",
