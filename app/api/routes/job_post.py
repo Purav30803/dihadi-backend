@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException,Request
 from app.db.mongodb import db
 from app.core.middleware import get_current_user
 from fastapi.security import OAuth2PasswordBearer
@@ -102,3 +102,51 @@ async def delete_job_post(job_id: str):
         raise HTTPException(status_code=404, detail="Job post not found")
     
     return {"message": "Job post deleted successfully","status":200}
+
+@router.get("/jobs", response_model=List[JobPostBase])
+async def list_job_posts(token: str = Depends(oauth2_scheme),request: Request = None):
+    # extract search query from the request
+    job_title = request.query_params.get('search')
+    print(job_title)
+    try:
+        # Decode the JWT and get the user ID
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get('id')  # Extract user ID from JWT payload
+
+        if not user_id:
+            raise HTTPException(status_code=400, detail="User ID not found in token")
+        user_id = str(user_id)  # Convert user_id to string
+        # Query job posts for the given user
+        job_posts_cursor = db["job_post"].find({"user_id": {"$ne": user_id},"status":"Active"})  # Ensure user_id is an ObjectId
+        job_posts = await job_posts_cursor.to_list()  # Fetch all job posts for this user
+
+        if not job_posts:
+            raise HTTPException(status_code=404, detail="No job posts found for this user")
+
+        # Transform `_id` to `id` for each job post
+        for job in job_posts:
+            if "job_title" not in job:
+                raise HTTPException(status_code=500, detail="Job post missing required field: job_title")
+            job["id"] = str(job.pop("_id"))
+        
+        # if users search for job it should filter from all job posts, skill, location, job title
+        
+        if job_title in job_posts:
+            job_posts_cursor = db["job_post"].find({"job_title": job_title,"status":"Active"})  # Ensure user_id is an ObjectId
+            job_posts = await job_posts_cursor.to_list()
+            return job_posts
+        
+        
+        final_job_posts = []
+        for job in job_posts:
+            if job_title in job['job_title']:
+                final_job_posts.append(job)
+
+        return final_job_posts  # Return the modified job posts
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=403, detail="Invalid Token")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
