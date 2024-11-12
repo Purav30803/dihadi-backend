@@ -18,4 +18,4 @@ app.include_router(job_post.router, prefix="/api/job_post", tags=["job_post"])
 
 @app.get("/")
 async def read_root():
-    return {"message": "Welcome to the FastAPI User Signup API!"}
+    return {"message": "Welcome to the DIHADI's API!"}
