@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
-from typing import List, Optional
+from typing import List, Optional,Dict
+
 
 class UserCreate(BaseModel):
     name: str
@@ -11,6 +12,7 @@ class UserCreate(BaseModel):
     is_student: bool
     skills: str
     id_proof: str
+    working_hours: Optional[Dict[str, Optional[str]]] = None
     # company_name: Optional[str] = None
     location: Optional[str] = None
 
@@ -26,6 +28,8 @@ class UserResponse(BaseModel):
     id_proof: str
     # company_name: Optional[str] = None
     location: Optional[str] = None
+    working_hours: Optional[Dict[str, Optional[str]]] = None
+
     # isEmployee: bool
 
     class Config:
@@ -38,3 +42,11 @@ class UserLogin(BaseModel):
 
 class UserDocumentResponse(BaseModel):
     id_proof: str
+    
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    location: Optional[str] = None
+    skills: Optional[str] = None  # Comma-separated string
+    working_hours: Optional[dict] = None  # Dictionary of working hours
+    id_proof: Optional[str] = None

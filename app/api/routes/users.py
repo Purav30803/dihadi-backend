@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.schemas.user import UserCreate, UserResponse, UserLogin, UserDocumentResponse
+from app.schemas.user import UserCreate, UserResponse, UserLogin, UserDocumentResponse,UserUpdate
 from app.db.mongodb import db
 from fastapi.responses import JSONResponse
 import os
@@ -12,7 +12,7 @@ import jwt
 from app.core.config import SECRET_KEY, ALGORITHM
 from fastapi.security import OAuth2PasswordBearer
 from dotenv import load_dotenv
-
+from bson import ObjectId
 router = APIRouter()
 load_dotenv()
 
@@ -153,7 +153,56 @@ async def get_user(token: str = Depends(oauth2_scheme)):
         return user
     except jwt.PyJWTError:
         raise HTTPException(status_code=403, detail="Invalid Token")
+    
+@router.put("/me", response_model=UserUpdate)
+async def update_user(user_update: UserUpdate, token: str = Depends(oauth2_scheme)):
+    try:
+        # Decode and validate the token
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_email = payload.get("email")
+        if not user_email:
+            raise HTTPException(status_code=403, detail="Invalid Token")
 
+        # Find the user by email
+        user = await db["users"].find_one({"email": user_email})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        user_id = user["_id"]
+        
+        # check phone number
+        if user_update.phone:
+            user_exists = await db["users"].find_one({"phone": user_update.phone})
+            if user_exists and user_exists['_id'] != user_id:
+                raise HTTPException(status_code=400, detail="User with this phone number already exists")   
+
+        # Build the update dictionary
+        update_data = user_update.dict(exclude_unset=True)
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No valid fields to update")
+
+        # Update the user in the database
+        await db["users"].update_one({"_id": ObjectId(user_id)}, {"$set": update_data})
+
+        # Fetch the updated user
+        updated_user = await db["users"].find_one({"_id": ObjectId(user_id)})
+        if not updated_user:
+            raise HTTPException(status_code=404, detail="Failed to fetch updated user")
+
+        # Convert ObjectId to string
+        updated_user["_id"] = str(updated_user["_id"])
+
+        # Return the updated user validated by UserUpdate
+        return UserUpdate(**updated_user)
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=403, detail="Token has expired")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=403, detail="Invalid Token")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    
 
 @router.get("/me/document",response_model=UserDocumentResponse)
 async def get_user_document(token: str = Depends(oauth2_scheme)):
