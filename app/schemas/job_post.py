@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from bson import ObjectId
 
 class JobPostBase(BaseModel):
@@ -13,8 +13,7 @@ class JobPostBase(BaseModel):
     location: str
     skills_required: str
     status: str  # active, completed, cancelled
-    class Config:
-        orm_mode = True
+    
 class JobPostCreate(JobPostBase):
     employer_id: str  # Reference to User's user_id
 

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.schemas.user import UserCreate, UserResponse, UserLogin, UserDocumentResponse
+from app.schemas.user import UserCreate, UserResponse, UserLogin, UserDocumentResponse,UserUpdate
 from app.db.mongodb import db
 from fastapi.responses import JSONResponse
 import os
@@ -12,6 +12,8 @@ import jwt
 from app.core.config import SECRET_KEY, ALGORITHM
 from fastapi.security import OAuth2PasswordBearer
 from dotenv import load_dotenv
+from bson import ObjectId
+from datetime import datetime, timedelta
 
 router = APIRouter()
 load_dotenv()
@@ -99,6 +101,15 @@ async def verify_user(email:str, otp:int):
             "message":"User verified successfully",
             })
          
+def generate_token(user_email, user_id):
+    expiration = datetime.utcnow() + timedelta(days=60)  # Token expires in 1 hour
+    payload = {
+        "email": user_email,
+        "id": user_id,
+        "exp": expiration  # Add the expiration claim
+    }
+    token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    return token
 
 # Login
 @router.post("/login")
@@ -129,8 +140,10 @@ async def login_user(user:UserLogin):
     user_id = user_exists['_id']
     user_id = str(user_id)
     
-    # create a token
-    token = jwt.encode({"email": user_email,"id":user_id}, SECRET_KEY, algorithm=ALGORITHM)
+
+
+# Example Usage
+    token = generate_token(user_email, user_id)   
     return JSONResponse({
         "status_code":200,
         "message":"Login Successful",
@@ -143,7 +156,6 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 @router.get("/me", response_model=UserResponse)
 async def get_user(token: str = Depends(oauth2_scheme)):
-    print(token)
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         # print(payload)
@@ -153,7 +165,69 @@ async def get_user(token: str = Depends(oauth2_scheme)):
         return user
     except jwt.PyJWTError:
         raise HTTPException(status_code=403, detail="Invalid Token")
+    
+@router.get("/{id}", response_model=UserResponse)
+async def get_user(id:str,token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # print(payload)
+        user = await db["users"].find_one({"_id": ObjectId(id)})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        return user
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=403, detail="Invalid Token")
+    
+    
+@router.put("/me", response_model=UserUpdate)
+async def update_user(user_update: UserUpdate, token: str = Depends(oauth2_scheme)):
+    try:
+        # Decode and validate the token
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_email = payload.get("email")
+        if not user_email:
+            raise HTTPException(status_code=403, detail="Invalid Token")
 
+        # Find the user by email
+        user = await db["users"].find_one({"email": user_email})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        user_id = user["_id"]
+        
+        # check phone number
+        if user_update.phone:
+            user_exists = await db["users"].find_one({"phone": user_update.phone})
+            if user_exists and user_exists['_id'] != user_id:
+                raise HTTPException(status_code=400, detail="User with this phone number already exists")   
+
+        # Build the update dictionary
+        update_data = user_update.dict(exclude_unset=True)
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No valid fields to update")
+
+        # Update the user in the database
+        await db["users"].update_one({"_id": ObjectId(user_id)}, {"$set": update_data})
+
+        # Fetch the updated user
+        updated_user = await db["users"].find_one({"_id": ObjectId(user_id)})
+        if not updated_user:
+            raise HTTPException(status_code=404, detail="Failed to fetch updated user")
+
+        # Convert ObjectId to string
+        updated_user["_id"] = str(updated_user["_id"])
+
+        # Return the updated user validated by UserUpdate
+        return UserUpdate(**updated_user)
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=403, detail="Token has expired")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=403, detail="Invalid Token")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    
 
 @router.get("/me/document",response_model=UserDocumentResponse)
 async def get_user_document(token: str = Depends(oauth2_scheme)):
@@ -176,3 +250,34 @@ async def get_user_document(token: str = Depends(oauth2_scheme)):
         })
     except jwt.PyJWTError:
         raise HTTPException(status_code=403, detail="Invalid Token")
+    
+
+@router.get("/jobs/applied")
+async def apply_job(token:str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user = await db["users"].find_one({"email": payload['email']})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        user_id = user['_id']
+        user_id = str(user_id)
+        jobs_ids = user.get('applied_jobs')
+        if not jobs_ids:
+            jobs_ids = []
+        
+        jobs = []
+        for job_id in jobs_ids:
+            job = await db["job_post"].find_one({"_id": ObjectId(job_id)})
+            if job:
+                job['id'] = str(job.pop('_id'))
+                jobs.append(job)
+        return JSONResponse({
+            "status_code":200,
+            "jobs":jobs,
+        })
+    
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=403, detail="Invalid Token")
+        
+        
+    
