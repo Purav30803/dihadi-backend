@@ -13,6 +13,7 @@ class UserCreate(BaseModel):
     skills: str
     id_proof: str
     working_hours: Optional[Dict[str, Optional[str]]] = None
+    applied_jobs: Optional[List[str]] = None
     # company_name: Optional[str] = None
     location: Optional[str] = None
 
@@ -29,7 +30,7 @@ class UserResponse(BaseModel):
     # company_name: Optional[str] = None
     location: Optional[str] = None
     working_hours: Optional[Dict[str, Optional[str]]] = None
-
+    applied_jobs: Optional[List[str]] = None
     # isEmployee: bool
 
     class Config:

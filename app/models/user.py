@@ -8,6 +8,7 @@ class User(BaseModel):
     phone: str
     password: str
     age: int
+    applied_jobs: List[str]
     # nationality: str
     is_student: bool
     skills: List[str]

@@ -64,7 +64,7 @@ async def list_job_posts(token: str = Depends(oauth2_scheme)):
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 
-@router.get("/job/{job_id}", response_model=JobPostBase)
+@router.get("/job/{job_id}")
 async def get_job_post(job_id: str):
     job_post = await db.job_post.find_one({"_id": ObjectId(job_id)})
 
@@ -73,7 +73,29 @@ async def get_job_post(job_id: str):
 
     job_post['id'] = str(job_post.pop('_id'))
     job_post['employer_id'] = job_post.pop('user_id')
-
+    
+    # fetch data from application collection
+    application = await db.applications.find_one({"post_id": job_id})
+    # return application
+    users = []
+    try:
+        # Iterate over the user_ids in the application
+        for user_data in application.get("user_ids", []):
+            user_id = user_data.get("user_id")
+            
+            # Fetch user details from the database
+            user = await db["users"].find_one({"_id": ObjectId(user_id)})
+            if user:  # Ensure user exists
+                # Convert MongoDB _id to string and add timestamp
+                user["id"] = str(user.pop("_id"))
+                user["timestamp"] = user_data.get("timestamp")
+                # dont return password and image
+                user.pop("password")
+                user.pop("id_proof")
+                users.append(user)   
+    except Exception as e:
+        print(f"Error fetching users: {e}")
+    job_post['applications'] = users
     return job_post
 
 @router.put("/job/{job_id}", response_model=JobPostBase)
