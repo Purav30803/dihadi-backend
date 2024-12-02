@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.schemas.user import UserCreate, UserResponse, UserLogin, UserDocumentResponse,UserUpdate
+from app.schemas.user import UserCreate, UserResponse, UserLogin, UserDocumentResponse,UserUpdate,UserEmail,UserPassword
 from app.db.mongodb import db
 from fastapi.responses import JSONResponse
 import os
@@ -23,18 +23,71 @@ SMTP_PORT = 587
 USER_EMAIL = os.getenv("USER_EMAIL")
 USER_PASSWORD = os.getenv("USER_PASSWORD")
 
-def send_otp(email):
-    
-    otp = random.randint(100000, 999999)
-    subject = "Your OTP Code"
-    body = f"Your OTP code is {otp}"
 
+def send_otp(email):
+    otp = random.randint(100000, 999999)
+    
+    # HTML email template with inline CSS
+    html_body = f"""
+    <html>
+    <head>
+        <style type="text/css">
+            body {{
+                font-family: Arial, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 20px;
+            }}
+            .container {{
+                background-color: #f4f4f4;
+                border-radius: 10px;
+                padding: 30px;
+                text-align: center;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }}
+            .otp-code {{
+                font-size: 24px;
+                font-weight: bold;
+                color: #007bff;
+                background-color: #e9ecef;
+                display: inline-block;
+                padding: 10px 20px;
+                border-radius: 5px;
+                margin: 20px 0;
+                letter-spacing: 3px;
+            }}
+            .disclaimer {{
+                font-size: 12px;
+                color: #6c757d;
+                margin-top: 20px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>Your One-Time Password (OTP)</h2>
+            <p>Please use the following code to complete your verification:</p>
+            <div class="otp-code">{otp}</div>
+            <p class="disclaimer">
+                If you did not request this OTP, please ignore this email or contact support.
+            </p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    # Prepare the email message
     msg = MIMEMultipart()
     msg["From"] = USER_EMAIL
     msg["To"] = email
-    msg["Subject"] = subject
-    msg.attach(MIMEText(body, "plain"))
-
+    msg["Subject"] = "Your One-Time Password (OTP)"
+    
+    # Attach both plain text and HTML versions
+    msg.attach(MIMEText(f"Your OTP code is: {otp}", "plain"))
+    msg.attach(MIMEText(html_body, "html"))
+    
     try:
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
             server.starttls()
@@ -240,9 +293,7 @@ async def get_user_document(token: str = Depends(oauth2_scheme)):
         # convert base64 to image
     
         # convert base64 to image
-      
-        
-        
+
         
         return JSONResponse({
             "status_code":200,
@@ -250,34 +301,121 @@ async def get_user_document(token: str = Depends(oauth2_scheme)):
         })
     except jwt.PyJWTError:
         raise HTTPException(status_code=403, detail="Invalid Token")
-    
 
 @router.get("/jobs/applied")
-async def apply_job(token:str = Depends(oauth2_scheme)):
+async def get_applied_jobs(token: str = Depends(oauth2_scheme)):
     try:
+        # Decode the token to get user information
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user = await db["users"].find_one({"email": payload['email']})
+        user_email = payload.get('email')
+
+        if not user_email:
+            raise HTTPException(status_code=400, detail="Invalid token")
+
+        # Fetch the user from the database
+        user = await db["users"].find_one({"email": user_email})
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-        user_id = user['_id']
-        user_id = str(user_id)
-        jobs_ids = user.get('applied_jobs')
-        if not jobs_ids:
-            jobs_ids = []
-        
+
+        applied_job_ids = user.get('applied_jobs', [])
         jobs = []
-        for job_id in jobs_ids:
-            job = await db["job_post"].find_one({"_id": ObjectId(job_id)})
-            if job:
-                job['id'] = str(job.pop('_id'))
-                jobs.append(job)
+
+        # Retrieve job details for each applied job ID
+        for job_id in applied_job_ids:
+            if isinstance(job_id, str):  # Ensure the job_id is in the correct format (string)
+                try:
+                    # Validate job_id as a valid ObjectId
+                    object_id = ObjectId(job_id)
+                except Exception:
+                    continue  # Skip invalid job IDs
+
+                job_details = await db["job_post"].find_one({"_id": object_id})
+                if job_details:
+                    # Build a sanitized response object
+                    sanitized_job = {
+                        "id": str(job_details["_id"]),
+                        "title": job_details.get("title"),
+                        "description": job_details.get("description"),
+                        "salary": job_details.get("salary"),
+                        "location": job_details.get("location"),
+                        "status": job_details.get("status"),
+                    }
+                    jobs.append(sanitized_job)
+
+        # Return the jobs as a structured JSON response
+        return {
+            "status_code": 200,
+            "message": "Applied jobs retrieved successfully",
+            "jobs": jobs,
+        }
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
+        
+@router.post("/forgot-otp")
+async def forgot_otp(user:UserEmail):
+    user_dict = user.dict()
+    email = user_dict['email']
+    user = await db["users"].find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    else:
+        otp =  send_otp(email)
+        await db["users"].update_one({"email": email}, {"$set": {"otp_forgot": otp}})
         return JSONResponse({
             "status_code":200,
-            "jobs":jobs,
+            "message":"OTP sent successfully",
         })
-    
-    except jwt.PyJWTError:
-        raise HTTPException(status_code=403, detail="Invalid Token")
         
+@router.get("/forgot-password/verify")
+async def verify_user(email:str, otp:int):
+    user = await db["users"].find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    else:
+        #drop otp from users collection
+        if user['otp_forgot'] != otp:
+            raise HTTPException(status_code=400, detail="Invalid OTP")
+        else:
+            await db["users"].update_one({"email": email}, {"$unset": {"otp_forgot": ""}})
+            return JSONResponse({
+            "status_code":200,
+            "message":"User verified successfully",
+            })
+            
+@router.put("/password/reset-password")
+async def reset_password(user:UserLogin):
+    user_dict = user.dict()
+    email = user_dict['email']
+    print(email)
+    password = user_dict['password']
+    user = await db["users"].find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    else:
+        await db["users"].update_one({"email": email}, {"$set": {"password": get_password_hash(password)}})
+        return JSONResponse({
+            "status_code":200,
+            "message":"Password reset successfully",
+        })
         
-    
+@router.put("/password/reset-password-user")
+async def reset_password(user:UserPassword,token: str = Depends(oauth2_scheme)):
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    email = payload['email']
+    user_dict = user.dict()
+    password = user_dict['password']
+    user = await db["users"].find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    else:
+        await db["users"].update_one({"email": email}, {"$set": {"password": get_password_hash(password)}})
+        return JSONResponse({
+            "status_code":200,
+            "message":"Password reset successfully",
+        })

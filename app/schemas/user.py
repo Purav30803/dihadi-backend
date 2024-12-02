@@ -30,7 +30,6 @@ class UserResponse(BaseModel):
     # company_name: Optional[str] = None
     location: Optional[str] = None
     working_hours: Optional[Dict[str, Optional[str]]] = None
-    applied_jobs: Optional[List[str]] = None
     # isEmployee: bool
 
     class Config:
@@ -51,3 +50,9 @@ class UserUpdate(BaseModel):
     skills: Optional[str] = None  # Comma-separated string
     working_hours: Optional[dict] = None  # Dictionary of working hours
     id_proof: Optional[str] = None
+    
+class UserEmail(BaseModel):
+    email: EmailStr
+    
+class UserPassword(BaseModel):
+    password: str
