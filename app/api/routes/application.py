@@ -36,10 +36,11 @@ async def get_current_user_id(token):
 async def create_application(post_id: str, token: str = Depends(oauth2_scheme)):
     try:
         # Extract user ID from the token
-        user_id = await get_current_user_id(token)  # Implement this function to extract user_id from the token
-        
+        user_id = await get_current_user_id(token)
+
         # Check if the job post already exists in applications
         existing_application = await db["applications"].find_one({"post_id": post_id})
+
         if not existing_application:
             # If no application exists, create a new application record
             application = Application(
@@ -49,7 +50,6 @@ async def create_application(post_id: str, token: str = Depends(oauth2_scheme)):
                 status="pending",
             )
             await db["applications"].insert_one(application.dict())
-            
         else:
             # If application exists, check if the user has already applied
             already_applied = any(
@@ -59,23 +59,30 @@ async def create_application(post_id: str, token: str = Depends(oauth2_scheme)):
                 raise HTTPException(
                     status_code=400, detail="User has already applied for this job."
                 )
+            # Append new user to the `user_ids` list
+            await db["applications"].update_one(
+                {"post_id": post_id},
+                {"$push": {"user_ids": {"user_id": user_id, "timestamp": datetime.now()}}}
+            )
 
+        # Update the user's record to include the applied job
         updated_user = await db["users"].find_one_and_update(
-                 {"_id": ObjectId(user_id)},
-                    {
-                        "$addToSet": {
-                            "applied_jobs": {
-                                "post_id": post_id,
-                                "applied_at": datetime.now()  # Add timestamp for when the job was applied
-                            }
-                        }
-                    },
-                    return_document=True  # Return the updated document
-                )
+            {"_id": ObjectId(user_id)},
+            {
+                "$addToSet": {
+                    "applied_jobs": {
+                        "post_id": post_id,
+                        "applied_at": datetime.now(),  # Add timestamp for when the job was applied
+                    }
+                }
+            },
+            return_document=True  # Return the updated document
+        )
         if not updated_user:
             raise HTTPException(status_code=404, detail="User not found")
 
         return {"message": "Application created successfully"}
+
     except HTTPException as e:
         raise e
     except Exception as e:

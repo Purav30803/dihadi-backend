@@ -303,7 +303,7 @@ async def get_user_document(token: str = Depends(oauth2_scheme)):
         raise HTTPException(status_code=403, detail="Invalid Token")
 
 @router.get("/jobs/applied")
-async def get_applied_jobs(token: str = Depends(oauth2_scheme)):
+async def get_applied_jobs(token: str = Depends(oauth2_scheme), page: int = 1, page_size: int = 10):
     try:
         # Decode the token to get user information
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -317,15 +317,17 @@ async def get_applied_jobs(token: str = Depends(oauth2_scheme)):
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-        applied_job_ids = user.get('applied_jobs', [])
+        applied_jobs = user.get('applied_jobs', [])
         jobs = []
 
-        # Retrieve job details for each applied job ID
-        for job_id in applied_job_ids:
-            if isinstance(job_id, str):  # Ensure the job_id is in the correct format (string)
+        # Retrieve job details for each applied job
+        for applied_job in applied_jobs:
+            post_id = applied_job.get("post_id")
+            applied_at = applied_job.get("applied_at")
+
+            if isinstance(post_id, str):  # Ensure post_id is in the correct format
                 try:
-                    # Validate job_id as a valid ObjectId
-                    object_id = ObjectId(job_id)
+                    object_id = ObjectId(post_id)
                 except Exception:
                     continue  # Skip invalid job IDs
 
@@ -334,19 +336,28 @@ async def get_applied_jobs(token: str = Depends(oauth2_scheme)):
                     # Build a sanitized response object
                     sanitized_job = {
                         "id": str(job_details["_id"]),
-                        "title": job_details.get("title"),
-                        "description": job_details.get("description"),
+                        "title": job_details.get("job_title"),
+                        "description": job_details.get("job_description"),
                         "salary": job_details.get("salary"),
                         "location": job_details.get("location"),
                         "status": job_details.get("status"),
+                        "shift_start": job_details.get("shift_start"),
+                        "shift_end": job_details.get("shift_end"),
+                        "applied_at": applied_at,  # Include applied timestamp from the user's data
                     }
                     jobs.append(sanitized_job)
+
+        # Paginate the jobs
+        start_index = (page - 1) * page_size
+        end_index = start_index + page_size
+        paginated_jobs = jobs[start_index:end_index]
 
         # Return the jobs as a structured JSON response
         return {
             "status_code": 200,
             "message": "Applied jobs retrieved successfully",
-            "jobs": jobs,
+            "jobs": paginated_jobs,
+            "total_jobs": len(jobs),
         }
 
     except jwt.ExpiredSignatureError:
