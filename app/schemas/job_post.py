@@ -13,6 +13,7 @@ class JobPostBase(BaseModel):
     location: str
     skills_required: str
     status: str  # active, completed, cancelled
+    timestamp: datetime
     
 class JobPostCreate(JobPostBase):
     employer_id: str  # Reference to User's user_id

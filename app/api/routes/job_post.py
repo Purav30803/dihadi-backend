@@ -8,6 +8,7 @@ from typing import List
 import jwt
 from app.core.config import SECRET_KEY, ALGORITHM
 from bson import ObjectId
+from datetime import datetime
 
 router = APIRouter()
 
@@ -18,7 +19,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 async def create_job_post(job_post: JobPost, current_user: User = Depends(get_current_user)):
     job_post = job_post.dict()
     job_post['user_id'] = current_user.user_id  # Add user_id to job_post
-    
+    # insert timestamp
+    job_post['timestamp'] = datetime.now()
     result = await db.job_post.insert_one(job_post)
     job_post['id'] = str(result.inserted_id)
     
